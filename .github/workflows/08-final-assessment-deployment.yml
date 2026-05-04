@@ -7,7 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  # 1. مرحلة التحقق والأمان (مستوحاة من 02-ci.yml)
   verify:
     runs-on: ubuntu-latest
     steps:
@@ -20,28 +19,24 @@ jobs:
 
       - name: Run Python Health Check
         run: |
-          # هنا بنفذ التست الخاص بالتطبيق (كمثال)
           echo "Running Python code verification..."
 
-      # إضافة Trivy Scan لفحص الـ Filesystem (المطلب الجديد)
       - name: Run Trivy FS Scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'table'
-          exit-code: '1' # لو لقى ثغرات خطيرة هيوقف الـ Workflow
+          exit-code: '1' 
           severity: 'CRITICAL,HIGH'
 
-  # 2. مرحلة بناء الصورة والرفع للـ Registry (مستوحاة من 03-build-artifact.yml)
   build-and-push:
     needs: verify
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' # تشتغل فقط عند الـ Merge أو الـ Push للـ main
+    if: github.event_name == 'push' 
     steps:
       - uses: actions/checkout@v4
 
-      # توليد الـ Tag المطلوب (التاريخ + رقم الـ Run) لضمان الـ Traceability
       - name: Generate Image Tag
         run: echo "IMAGE_TAG=$(date +'%Y-%m-%d')-${{ github.run_id }}" >> $GITHUB_ENV
 
@@ -66,16 +61,16 @@ jobs:
     steps:
       - name: Pull and Run Container
         run: |
-          # مسح أي نسخة قديمة لو موجودة
+         
           docker stop tiny-health-app || true
           docker rm tiny-health-app || true
-          # سحب النسخة الجديدة من الـ Registry (Docker Hub)
+         
           docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
-          # تشغيل الحاوية على بورت 8000
+         
           docker run -d --name tiny-health-app -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
 
       - name: Validate Deployment (Health Check)
         run: |
-          sleep 10 # انتظار بدء التشغيل
-          # التأكد من أن التطبيق يرد بنجاح
+          sleep 10 
+         
           curl -f http://localhost:8000/health
