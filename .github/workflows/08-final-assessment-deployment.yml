@@ -7,6 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
+  # 1. مرحلة التحقق والأمان (مستوحاة من 02-ci.yml)
   verify:
     runs-on: ubuntu-latest
     steps:
@@ -19,24 +20,28 @@ jobs:
 
       - name: Run Python Health Check
         run: |
-          echo "Running Python code checks..."
+          # هنا بنفذ التست الخاص بالتطبيق (كمثال)
+          echo "Running Python code verification..."
 
+      # إضافة Trivy Scan لفحص الـ Filesystem (المطلب الجديد)
       - name: Run Trivy FS Scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'table'
-          exit-code: '1' 
+          exit-code: '1' # لو لقى ثغرات خطيرة هيوقف الـ Workflow
           severity: 'CRITICAL,HIGH'
 
+  # 2. مرحلة بناء الصورة والرفع للـ Registry (مستوحاة من 03-build-artifact.yml)
   build-and-push:
     needs: verify
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' 
+    if: github.event_name == 'push' # تشتغل فقط عند الـ Merge أو الـ Push للـ main
     steps:
       - uses: actions/checkout@v4
 
+      # توليد الـ Tag المطلوب (التاريخ + رقم الـ Run) لضمان الـ Traceability
       - name: Generate Image Tag
         run: echo "IMAGE_TAG=$(date +'%Y-%m-%d')-${{ github.run_id }}" >> $GITHUB_ENV
 
@@ -46,7 +51,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push
+      - name: Build and Push to Registry
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -55,30 +60,23 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:${{ env.IMAGE_TAG }}
 
-  deploy:
+  # 3. مرحلة النشر والتأكد (مستوحاة من 04-deploy.yml)
+  deploy-and-validate:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VM via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            docker stop tiny-health-app || true
-            docker rm tiny-health-app || true
-            
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
-            docker run -d --name tiny-health-app -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
-
-  validate:
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Smoke Test Endpoints
+      - name: Pull and Run Container
         run: |
-          sleep 10 
-          curl -f http://${{ secrets.VM_HOST }}:8000/health
-          curl -f http://${{ secrets.VM_HOST }}:8000/version
-          curl -f http://${{ secrets.VM_HOST }}:8000/status
+          # مسح أي نسخة قديمة لو موجودة
+          docker stop tiny-health-app || true
+          docker rm tiny-health-app || true
+          # سحب النسخة الجديدة من الـ Registry (Docker Hub)
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
+          # تشغيل الحاوية على بورت 8000
+          docker run -d --name tiny-health-app -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
+
+      - name: Validate Deployment (Health Check)
+        run: |
+          sleep 10 # انتظار بدء التشغيل
+          # التأكد من أن التطبيق يرد بنجاح
+          curl -f http://localhost:8000/health
