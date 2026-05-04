@@ -60,7 +60,6 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:${{ env.IMAGE_TAG }}
 
-  # 3. مرحلة النشر والتأكد (مستوحاة من 04-deploy.yml)
   deploy-and-validate:
     needs: build-and-push
     runs-on: ubuntu-latest
