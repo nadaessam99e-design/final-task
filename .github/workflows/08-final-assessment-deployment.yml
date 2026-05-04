@@ -7,7 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  # المرحلة الأولى: التحقق (مبنية على Lab-02) + فحص الأمان (Trivy)
   verify:
     runs-on: ubuntu-latest
     steps:
@@ -20,28 +19,24 @@ jobs:
 
       - name: Run Python Health Check
         run: |
-          # استبدلي هذا بالأمر الفعلي للتست الخاص بكِ
           echo "Running Python code checks..."
 
-      # إضافة Trivy Scan المطلوبة (فحص ملفات النظام والـ OS)
       - name: Run Trivy FS Scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'table'
-          exit-code: '1' # يوقف الـ pipeline لو لقى ثغرات خطيرة
+          exit-code: '1' 
           severity: 'CRITICAL,HIGH'
 
-  # المرحلة الثانية: بناء الصورة ورفعها (مبنية على Lab-03 و Docker Hub)
   build-and-push:
     needs: verify
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' # يشتغل فقط عند الـ Merge أو الـ Push الفعلي
+    if: github.event_name == 'push' 
     steps:
       - uses: actions/checkout@v4
 
-      # توليد الـ Tag المطلوب (التاريخ + رقم الـ Run)
       - name: Generate Image Tag
         run: echo "IMAGE_TAG=$(date +'%Y-%m-%d')-${{ github.run_id }}" >> $GITHUB_ENV
 
@@ -60,7 +55,6 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:${{ env.IMAGE_TAG }}
 
-  # المرحلة الثالثة: النشر على السيرفر (مبنية على Lab-04 و SSH)
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -72,22 +66,19 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # مسح أي حاوية قديمة بنفس الاسم
             docker stop tiny-health-app || true
             docker rm tiny-health-app || true
             
-            # سحب الصورة الجديدة وتشغيلها
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
             docker run -d --name tiny-health-app -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/tiny-health-app:latest
 
-  # المرحلة الرابعة: التأكد من عمل التطبيق (Validation)
   validate:
     needs: deploy
     runs-on: ubuntu-latest
     steps:
       - name: Smoke Test Endpoints
         run: |
-          sleep 10 # انتظار بدء التشغيل
+          sleep 10 
           curl -f http://${{ secrets.VM_HOST }}:8000/health
           curl -f http://${{ secrets.VM_HOST }}:8000/version
           curl -f http://${{ secrets.VM_HOST }}:8000/status
